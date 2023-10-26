@@ -3,6 +3,7 @@ const app = express();
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config()
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -47,6 +48,7 @@ async function run() {
     const reviewCollection = client.db("rangdhanuRestaurantDB").collection("reviews");
     const cartCollection = client.db("rangdhanuRestaurantDB").collection("carts");
     const usersCollection = client.db("rangdhanuRestaurantDB").collection("users");
+    const paymentCollection = client.db("rangdhanuRestaurantDB").collection("payment");
 
     app.post('/jwt', (req, res) => {
       const user = req.body;
@@ -120,6 +122,20 @@ async function run() {
       res.send(result);
     });
 
+    app.post('/menus', verifyJWT, verifyAdmin, async (req, res) => {
+      const newItems = req.body;
+      const result = await menuCollection.insertOne(newItems);
+      res.send(result);
+    });
+
+    app.delete('/menus/:id', verifyJWT, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await menuCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    //reviews collection
     app.get('/reviews', async (req, res) => {
       const result = await reviewCollection.find().toArray();
       res.send(result);
@@ -156,6 +172,33 @@ async function run() {
       const result = await cartCollection.deleteOne(query);
       res.send(result);
     });
+
+    app.post("/create-payment-intent", verifyJWT, async (req, res) => {
+      const { price } = req.body;
+      console.log(price)
+      const amount = price * 100;
+      console.log(amount)
+
+      // Create a PaymentIntent with the order amount and currency
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: 1000,
+        currency: 'usd',
+        payment_method_types: ['card'],
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    app.post('/payments', verifyJWT, async (req, res) => {
+      const payment = req.body;
+      const insertResult = await paymentCollection.insertOne(payment);
+      const query = { _id: { $in: payment.cartItems.map(id => new ObjectId(id)) } }
+      const deleteResult = await cartCollection.deleteMany(query)
+
+      res.send({ insertResult, deleteResult });
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
