@@ -176,7 +176,7 @@ async function run() {
     app.post("/create-payment-intent", verifyJWT, async (req, res) => {
       const { price } = req.body;
       console.log(price)
-      const amount = price * 100;
+      const amount = parseInt(price * 100);
       console.log(amount)
 
       // Create a PaymentIntent with the order amount and currency
@@ -198,6 +198,18 @@ async function run() {
       const deleteResult = await cartCollection.deleteMany(query)
 
       res.send({ insertResult, deleteResult });
+    });
+
+    app.get('/admin-stats', verifyJWT, verifyAdmin, async(req, res) => {
+      const users = await usersCollection.estimatedDocumentCount();
+      const products = await menuCollection.estimatedDocumentCount();
+      const orders = await paymentCollection.estimatedDocumentCount();
+      const payments = await paymentCollection.find().toArray();
+      const revenue = payments.reduce((sum, payment) => sum + payment.price, 0)
+      res.send({
+        users, products, orders, revenue
+      })
+
     })
 
     // Send a ping to confirm a successful connection
